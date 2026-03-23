@@ -8,6 +8,7 @@ import (
 	"gochat/internal/config"
 	"gochat/internal/database"
 	"gochat/internal/handlers"
+	"gochat/internal/middleware"
 )
 
 func main() {
@@ -24,6 +25,12 @@ func main() {
 
 	r.POST("/register", handlers.Register)
 	r.POST("/login", handlers.Login)
+
+	auth := r.Group("/")
+	auth.Use(middleware.AuthMiddleware())
+	{
+		auth.POST("/documents", handlers.CreateDocument)
+	}
 
 	port := config.GetPort()
 

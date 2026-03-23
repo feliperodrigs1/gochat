@@ -14,6 +14,7 @@ dist/
 *.test
 *.out
 coverage.out
+tmp/
 
 # IDE / editor
 .vscode/
@@ -22,3 +23,9 @@ coverage.out
 # OS files
 .DS_Store
 Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
