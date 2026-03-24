@@ -47,3 +47,27 @@ func TestAskOpenAI_InvalidResponse(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "", answer)
 }
+
+func TestAskOpenAIRewrite_Success(t *testing.T) {
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	mockResponse := map[string]interface{}{
+		"choices": []map[string]interface{}{
+			{
+				"message": map[string]interface{}{
+					"content": "rewritten question",
+				},
+			},
+		},
+	}
+
+	httpmock.RegisterResponder("POST", "https://api.openai.com/v1/chat/completions",
+		httpmock.NewJsonResponderOrPanic(200, mockResponse),
+	)
+
+	rewritten, err := services.AskOpenAIRewrite("history", "question")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "rewritten question", rewritten)
+}
