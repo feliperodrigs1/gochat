@@ -16,6 +16,7 @@ func TestAnswerQuestion_Success(t *testing.T) {
 	os.Setenv("ENV", "test")
 	database.Connect()
 
+	database.DB.Exec("DELETE FROM questions")
 	database.DB.Exec("DELETE FROM chunks")
 	database.DB.Exec("DELETE FROM documents")
 
@@ -68,6 +69,51 @@ func TestAnswerQuestion_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "O gato mia sim", answer)
+
+	var savedQuestion models.Question
+	err = database.DB.Where("document_id = ? AND question = ?", doc.ID, "o que o gato faz?").First(&savedQuestion).Error
+	assert.NoError(t, err)
+	assert.Equal(t, "O gato mia sim", savedQuestion.Answer)
+}
+
+func TestAnswerQuestion_CacheHit(t *testing.T) {
+	os.Setenv("ENV", "test")
+	database.Connect()
+
+	database.DB.Exec("DELETE FROM questions")
+	database.DB.Exec("DELETE FROM chunks")
+	database.DB.Exec("DELETE FROM documents")
+
+	doc := models.Document{
+		Title:    "Test Doc Cache",
+		PublicId: "qa-test-cache",
+		UserID:   99,
+	}
+	database.DB.Create(&doc)
+
+	q := models.Question{
+		DocumentID: doc.ID,
+		Question:   "pergunta muito igual",
+		Answer:     "Resposta que veio do cache",
+		Embedding:  "[0.5, 0.5, 0.5]",
+	}
+	database.DB.Create(&q)
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://api.openai.com/v1/embeddings",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"embedding": []float64{0.5, 0.5, 0.5}},
+			},
+		}),
+	)
+
+	answer, err := services.AnswerQuestion(99, "qa-test-cache", "pergunta MUITO igual?") // different case
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Resposta que veio do cache", answer)
 }
 
 func TestAnswerQuestion_DocumentNotFound(t *testing.T) {
