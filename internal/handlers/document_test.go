@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
 	"gochat/internal/database"
@@ -52,6 +53,17 @@ func createMultipartRequest(t *testing.T, filename string, content string) (*htt
 
 func TestCreateDocumentSuccess(t *testing.T) {
 	r := setupDocumentRouter()
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://api.openai.com/v1/embeddings",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"embedding": []float64{0.1, 0.2}},
+			},
+		}),
+	)
 
 	req, err := createMultipartRequest(t, "documento.txt", "Exemplo de conteúdo salvo via arquivo")
 	assert.NoError(t, err)

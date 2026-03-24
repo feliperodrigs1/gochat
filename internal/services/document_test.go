@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
 	"gochat/internal/database"
@@ -28,11 +29,22 @@ func TestProcessAndSaveDocument(t *testing.T) {
 	os.Setenv("ENV", "test")
 	database.Connect()
 
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://api.openai.com/v1/embeddings",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"embedding": []float64{0.1, 0.2}},
+			},
+		}),
+	)
+
 	user := models.User{Email: "svc@test.com", Password: "123"}
 	database.DB.Create(&user)
 
 	fileContent := bytes.NewBufferString("Este é o meu documento de teste para testar a gravação.")
-	
+
 	docID, totalChunks, err := services.ProcessAndSaveDocument(user.ID, "test.txt", fileContent)
 
 	assert.NoError(t, err)

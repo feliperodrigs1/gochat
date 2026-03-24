@@ -30,6 +30,7 @@ func main() {
 	auth.Use(middleware.AuthMiddleware())
 	{
 		auth.POST("/documents", handlers.CreateDocument)
+		auth.POST("/ask", handlers.Ask)
 	}
 
 	port := config.GetPort()

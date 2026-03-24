@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"gochat/internal/database"
 	"gochat/internal/models"
@@ -32,19 +33,28 @@ func ProcessAndSaveDocument(userID uint, filename string, fileReader io.Reader) 
 	}
 
 	for _, chunk := range chunks {
+		embedding, err := GenerateEmbedding(chunk)
+		if err != nil {
+			tx.Rollback()
+			return "", 0, err
+		}
+
+		embeddingJSON, _ := json.Marshal(embedding)
+
 		chunkModel := models.Chunk{
 			DocumentID: doc.ID,
 			Content:    chunk,
+			Embedding:  string(embeddingJSON),
 		}
 
 		if err := tx.Create(&chunkModel).Error; err != nil {
 			tx.Rollback()
-			return "", 0, errors.New("failed to save document chunk")
+			return "", 0, err
 		}
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return "", 0, errors.New("failed to commit transaction")
+		return "", 0, err
 	}
 
 	return doc.PublicId, len(chunks), nil
