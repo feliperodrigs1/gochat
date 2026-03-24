@@ -14,6 +14,7 @@ func Ask(c *gin.Context) {
 	var body struct {
 		DocumentID string `json:"document_id"`
 		Question   string `json:"question"`
+		ExternalID string   `json:"external_id"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -21,12 +22,12 @@ func Ask(c *gin.Context) {
 		return
 	}
 
-	if body.DocumentID == "" || body.Question == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Document ID and question are required"})
+	if body.DocumentID == "" || body.Question == "" || body.ExternalID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
 		return
 	}
 
-	answer, err := services.AnswerQuestion(userID, body.DocumentID, body.Question)
+	answer, err := services.AnswerWithConversation(userID, body.DocumentID, body.Question, body.ExternalID)
 	if err != nil {
 		if err.Error() == "document not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Document not found"})

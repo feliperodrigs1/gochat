@@ -12,11 +12,12 @@ import (
 	"gochat/internal/services"
 )
 
-func TestAnswerQuestion_Success(t *testing.T) {
+func TestAnswerWithConversation_Success(t *testing.T) {
 	os.Setenv("ENV", "test")
 	database.Connect()
 
-	database.DB.Exec("DELETE FROM questions")
+	database.DB.Exec("DELETE FROM messages")
+	database.DB.Exec("DELETE FROM conversations")
 	database.DB.Exec("DELETE FROM chunks")
 	database.DB.Exec("DELETE FROM documents")
 
@@ -65,62 +66,22 @@ func TestAnswerQuestion_Success(t *testing.T) {
 		}),
 	)
 
-	answer, err := services.AnswerQuestion(99, "qa-test-id", "o que o gato faz?")
+	answer, err := services.AnswerWithConversation(99, "qa-test-id", "o que o gato faz?", "client_123")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "O gato mia sim", answer)
 
-	var savedQuestion models.Question
-	err = database.DB.Where("document_id = ? AND question = ?", doc.ID, "o que o gato faz?").First(&savedQuestion).Error
+	var savedMessage models.Message
+	err = database.DB.Where("role = ? AND content = ?", "assistant", "O gato mia sim").First(&savedMessage).Error
 	assert.NoError(t, err)
-	assert.Equal(t, "O gato mia sim", savedQuestion.Answer)
+	assert.Equal(t, "O gato mia sim", savedMessage.Content)
 }
 
-func TestAnswerQuestion_CacheHit(t *testing.T) {
+func TestAnswerWithConversation_DocumentNotFound(t *testing.T) {
 	os.Setenv("ENV", "test")
 	database.Connect()
 
-	database.DB.Exec("DELETE FROM questions")
-	database.DB.Exec("DELETE FROM chunks")
-	database.DB.Exec("DELETE FROM documents")
-
-	doc := models.Document{
-		Title:    "Test Doc Cache",
-		PublicId: "qa-test-cache",
-		UserID:   99,
-	}
-	database.DB.Create(&doc)
-
-	q := models.Question{
-		DocumentID: doc.ID,
-		Question:   "pergunta muito igual",
-		Answer:     "Resposta que veio do cache",
-		Embedding:  "[0.5, 0.5, 0.5]",
-	}
-	database.DB.Create(&q)
-
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	httpmock.RegisterResponder("POST", "https://api.openai.com/v1/embeddings",
-		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"data": []map[string]interface{}{
-				{"embedding": []float64{0.5, 0.5, 0.5}},
-			},
-		}),
-	)
-
-	answer, err := services.AnswerQuestion(99, "qa-test-cache", "pergunta MUITO igual?") // different case
-
-	assert.NoError(t, err)
-	assert.Equal(t, "Resposta que veio do cache", answer)
-}
-
-func TestAnswerQuestion_DocumentNotFound(t *testing.T) {
-	os.Setenv("ENV", "test")
-	database.Connect()
-
-	answer, err := services.AnswerQuestion(99, "unknown-id", "ola?")
+	answer, err := services.AnswerWithConversation(99, "unknown-id", "ola?", "client_123")
 
 	assert.Error(t, err)
 	assert.Equal(t, "document not found", err.Error())

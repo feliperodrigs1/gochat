@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
 
 	"gochat/internal/database"
@@ -16,70 +15,68 @@ type ScoredChunk struct {
 	Score   float64
 }
 
-func AnswerQuestion(userID uint, documentID, question string) (string, error) {
+func AnswerWithConversation(userID uint, documentID, question, externalID string) (string, error) {
 	normalizedQuestion := strings.ToLower(strings.TrimSpace(question))
 
 	var doc models.Document
-	if err := database.DB.Where("public_id = ? AND user_id = ?", documentID, userID).First(&doc).Error; err != nil {
+	if err := database.DB.
+		Where("public_id = ? AND user_id = ?", documentID, userID).
+		First(&doc).Error; err != nil {
+
 		return "", errors.New("document not found")
+	}
+
+	var conv models.Conversation
+
+	err := database.DB.
+		Where("document_id = ? AND external_id = ?", doc.ID, externalID).
+		First(&conv).Error
+
+	if err != nil {
+		conv = models.Conversation{
+			DocumentID: doc.ID,
+			ExternalID: externalID,
+		}
+		database.DB.Create(&conv)
+	}
+
+	database.DB.Create(&models.Message{
+		ConversationID: conv.ID,
+		Role:           "user",
+		Content:        normalizedQuestion,
+	})
+
+	var messages []models.Message
+
+	database.DB.
+		Where("conversation_id = ?", conv.ID).
+		Order("id ASC").
+		Limit(10).
+		Find(&messages)
+
+	history := ""
+	for _, m := range messages {
+		history += m.Role + ": " + m.Content + "\n"
 	}
 
 	questionEmbedding, err := GenerateEmbedding(normalizedQuestion)
 	if err != nil {
-		return "", errors.New("failed to generate embedding")
-	}
-
-	var questions []models.Question
-
-	database.DB.
-		Where("document_id = ?", doc.ID).
-		Limit(20).
-		Find(&questions)
-
-	bestScore := 0.0
-	bestAnswer := ""
-
-	for _, q := range questions {
-		var emb []float64
-		if err := json.Unmarshal([]byte(q.Embedding), &emb); err != nil {
-			continue
-		}
-
-		score := CosineSimilarity(questionEmbedding, emb)
-
-		if score > bestScore {
-			bestScore = score
-			bestAnswer = q.Answer
-		}
-	}
-
-	if bestScore > 0.85 {
-		return bestAnswer, nil
+		return "", err
 	}
 
 	var chunks []models.Chunk
-	if err := database.DB.Where("document_id = ?", doc.ID).Limit(50).Find(&chunks).Error; err != nil {
-		return "", errors.New("failed to retrieve document chunks")
-	}
+	database.DB.
+		Where("document_id = ?", doc.ID).
+		Limit(50).
+		Find(&chunks)
 
 	var scored []ScoredChunk
 
-	words := strings.Fields(strings.ToLower(normalizedQuestion))
-
 	for _, ch := range chunks {
 		var emb []float64
-		if err := json.Unmarshal([]byte(ch.Embedding), &emb); err != nil {
-			continue
-		}
+		json.Unmarshal([]byte(ch.Embedding), &emb)
 
 		score := CosineSimilarity(questionEmbedding, emb)
-		contentLower := strings.ToLower(ch.Content)
-
-		for _, word := range words {
-			if strings.Contains(contentLower, word) {
-				score += 0.02
-			}
-		}
 
 		scored = append(scored, ScoredChunk{
 			Content: ch.Content,
@@ -96,28 +93,25 @@ func AnswerQuestion(userID uint, documentID, question string) (string, error) {
 		topK = len(scored)
 	}
 
-	if topK == 0 {
-		return "No relevant information found in the document.", nil
-	}
-
-	top := scored[:topK]
 	context := ""
-	for i, t := range top {
-		context += "Chunk " + strconv.Itoa(i+1) + ":\n" + t.Content + "\n\n"
+	for i := 0; i < topK; i++ {
+		context += scored[i].Content + "\n"
 	}
 
-	answer, err := AskOpenAI(context, question)
+	fullPrompt := "Answer ONLY using the context.\n\n" +
+		"Context:\n" + context + "\n\n" +
+		"Conversation:\n" + history + "\n\n" +
+		"Question:\n" + normalizedQuestion
+
+	answer, err := AskOpenAI(fullPrompt, "")
 	if err != nil {
-		return "", errors.New("failed to get answer from open ai")
+		return "", err
 	}
 
-	embeddingJSON, _ := json.Marshal(questionEmbedding)
-
-	database.DB.Create(&models.Question{
-		DocumentID: doc.ID,
-		Question:   normalizedQuestion,
-		Answer:     answer,
-		Embedding:  string(embeddingJSON),
+	database.DB.Create(&models.Message{
+		ConversationID: conv.ID,
+		Role:           "assistant",
+		Content:        answer,
 	})
 
 	return answer, nil
