@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,24 +17,147 @@ type ScoredChunk struct {
 	Score   float64
 }
 
-func AnswerQuestion(userID uint, documentID, question string) (string, error) {
-	var doc models.Document
-	if err := database.DB.Where("public_id = ? AND user_id = ?", documentID, userID).First(&doc).Error; err != nil {
-		return "", errors.New("document not found")
+func AnswerWithConversation(userID uint, documentID, question, externalID string) (string, error) {
+	normalizedQuestion := strings.ToLower(strings.TrimSpace(question))
+
+	doc, err := fetchDocument(userID, documentID)
+	if err != nil {
+		return "", err
 	}
 
+	conv, err := getOrCreateConversation(doc.ID, externalID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := saveUserMessage(conv.ID, normalizedQuestion); err != nil {
+		return "", err
+	}
+
+	history, err := buildConversationHistory(conv.ID)
+	if err != nil {
+		return "", err
+	}
+
+	answer, err := generateAnswer(doc.ID, normalizedQuestion, history)
+
+	if err == nil && !isBadAnswer(answer) {
+		saveAssistantMessage(conv.ID, answer)
+		return answer, nil
+	}
+
+	rewritten, err := RewriteQuestion(history, normalizedQuestion)
+	if err != nil {
+		log.Println("erro no rewrite, usando original")
+		rewritten = normalizedQuestion
+	}
+
+	answer, err = generateAnswer(doc.ID, rewritten, history)
+
+	if err != nil {
+		return "", err
+	}
+
+	saveAssistantMessage(conv.ID, answer)
+
+	return answer, nil
+}
+
+func fetchDocument(userID uint, documentID string) (models.Document, error) {
+	var doc models.Document
+	if err := database.DB.
+		Where("public_id = ? AND user_id = ?", documentID, userID).
+		First(&doc).Error; err != nil {
+		return doc, errors.New("document not found")
+	}
+
+	return doc, nil
+}
+
+func getOrCreateConversation(docID uint, externalID string) (models.Conversation, error) {
+	var conv models.Conversation
+	err := database.DB.
+		Where("document_id = ? AND external_id = ?", docID, externalID).
+		First(&conv).Error
+
+	if err != nil {
+		conv = models.Conversation{
+			DocumentID: docID,
+			ExternalID: externalID,
+		}
+		if err := database.DB.Create(&conv).Error; err != nil {
+			return conv, err
+		}
+	}
+	return conv, nil
+}
+
+func saveUserMessage(conversationID uint, content string) error {
+	return database.DB.Create(&models.Message{
+		ConversationID: conversationID,
+		Role:           "user",
+		Content:        content,
+	}).Error
+}
+
+func buildConversationHistory(conversationID uint) (string, error) {
+	var messagesDesc []models.Message
+
+	err := database.DB.
+		Where("conversation_id = ?", conversationID).
+		Order("id DESC").
+		Limit(6).
+		Find(&messagesDesc).Error
+	if err != nil {
+		return "", err
+	}
+
+	var messages []models.Message
+	for i := len(messagesDesc) - 1; i >= 0; i-- {
+		messages = append(messages, messagesDesc[i])
+	}
+
+	history := ""
+	for _, m := range messages {
+		history += m.Role + ": " + m.Content + "\n"
+	}
+
+	return history, nil
+}
+
+func generateAnswer(documentID uint, question, history string) (string, error) {
 	questionEmbedding, err := GenerateEmbedding(question)
 	if err != nil {
-		return "", errors.New("failed to generate embedding")
+		return "", err
 	}
 
+	chunks, err := fetchDocumentChunks(documentID)
+	if err != nil {
+		return "", err
+	}
+
+	topChunks := getTopScoredChunks(chunks, question, questionEmbedding, 5)
+
+	if len(topChunks) == 0 {
+		return "I don't know based on the provided document.", nil
+	}
+
+	context := buildContextFromChunks(topChunks)
+
+	return AskOpenAI(context, history+"\nQuestion: "+question)
+}
+
+func fetchDocumentChunks(documentID uint) ([]models.Chunk, error) {
 	var chunks []models.Chunk
-	if err := database.DB.Where("document_id = ?", doc.ID).Limit(50).Find(&chunks).Error; err != nil {
-		return "", errors.New("failed to retrieve document chunks")
-	}
+	err := database.DB.
+		Where("document_id = ?", documentID).
+		Limit(50).
+		Find(&chunks).Error
+	return chunks, err
+}
 
+func getTopScoredChunks(chunks []models.Chunk, question string, questionEmbedding []float64, topK int) []ScoredChunk {
 	var scored []ScoredChunk
-
 	words := strings.Fields(strings.ToLower(question))
 
 	for _, ch := range chunks {
@@ -47,7 +171,9 @@ func AnswerQuestion(userID uint, documentID, question string) (string, error) {
 
 		for _, word := range words {
 			if strings.Contains(contentLower, word) {
-				score += 0.02
+				if len(word) > 4 {
+					score += 0.05
+				}
 			}
 		}
 
@@ -61,25 +187,41 @@ func AnswerQuestion(userID uint, documentID, question string) (string, error) {
 		return scored[i].Score > scored[j].Score
 	})
 
-	topK := 5
+	if len(scored) == 0 || scored[0].Score < 0.6 {
+		return []ScoredChunk{}
+	}
+
 	if len(scored) < topK {
 		topK = len(scored)
 	}
 
-	if topK == 0 {
-		return "No relevant information found in the document.", nil
-	}
+	return scored[:topK]
+}
 
-	top := scored[:topK]
+func buildContextFromChunks(chunks []ScoredChunk) string {
 	context := ""
-	for i, t := range top {
-		context += "Chunk " + strconv.Itoa(i+1) + ":\n" + t.Content + "\n\n"
+	for i, t := range chunks {
+		context += "Source " + strconv.Itoa(i+1) + ":\n" + t.Content + "\n\n"
 	}
+	return context
+}
 
-	answer, err := AskOpenAI(context, question)
-	if err != nil {
-		return "", errors.New("failed to get answer from open ai")
-	}
+func isBadAnswer(answer string) bool {
+	a := strings.ToLower(answer)
 
-	return answer, nil
+	return strings.Contains(a, "i don't know") ||
+		strings.Contains(a, "não sei") ||
+		strings.Contains(a, "não encontrado")
+}
+
+func saveAssistantMessage(conversationID uint, answer string) {
+	database.DB.Create(&models.Message{
+		ConversationID: conversationID,
+		Role:           "assistant",
+		Content:        answer,
+	})
+}
+
+func RewriteQuestion(history, question string) (string, error) {
+	return AskOpenAIRewrite(history, question)
 }

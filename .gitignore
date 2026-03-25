@@ -15,6 +15,7 @@ dist/
 *.out
 coverage.out
 tmp/
+coverage
 
 # IDE / editor
 .vscode/

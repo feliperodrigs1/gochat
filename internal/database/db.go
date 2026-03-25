@@ -37,6 +37,9 @@ func Connect() {
 		&models.User{},
 		&models.Document{},
 		&models.Chunk{},
+		&models.Question{},
+		&models.Conversation{},
+		&models.Message{},
 	)
 
 	DB = db

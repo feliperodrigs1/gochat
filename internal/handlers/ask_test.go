@@ -47,6 +47,7 @@ func TestAskSuccess(t *testing.T) {
 	body := map[string]string{
 		"document_id": "test-doc-id",
 		"question":    "Qual o significado da vida?",
+		"external_id": "client_123",
 	}
 	jsonBody, _ := json.Marshal(body)
 
@@ -95,6 +96,7 @@ func TestAskDocumentNotFound(t *testing.T) {
 	body := map[string]string{
 		"document_id": "non-existent-id",
 		"question":    "Qual o significado da vida?",
+		"external_id": "client_123",
 	}
 	jsonBody, _ := json.Marshal(body)
 
