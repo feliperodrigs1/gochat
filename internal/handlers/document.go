@@ -39,3 +39,34 @@ func CreateDocument(c *gin.Context) {
 		"chunks":     totalChunks,
 	})
 }
+
+func GetDocuments(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	documents, err := services.GetDocumentsByUserID(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve documents"})
+		return
+	}
+
+	type DocumentResponse struct {
+		PublicID  string `json:"public_id"`
+		Title     string `json:"title"`
+		CreatedAt string `json:"created_at"`
+	}
+
+	var response []DocumentResponse
+	for _, doc := range documents {
+		response = append(response, DocumentResponse{
+			PublicID:  doc.PublicId,
+			Title:     doc.Title,
+			CreatedAt: doc.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
+}

@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-    config.LoadEnv()
+	config.LoadEnv()
 	database.Connect()
 
 	r := gin.Default()
@@ -30,6 +30,7 @@ func main() {
 	auth.Use(middleware.AuthMiddleware())
 	{
 		auth.POST("/documents", handlers.CreateDocument)
+		auth.GET("/documents", handlers.GetDocuments)
 		auth.POST("/ask", handlers.Ask)
 	}
 

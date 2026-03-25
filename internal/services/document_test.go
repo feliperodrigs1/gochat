@@ -56,3 +56,40 @@ func TestProcessAndSaveDocument(t *testing.T) {
 	assert.Equal(t, "test.txt", doc.Title)
 	assert.Equal(t, user.ID, doc.UserID)
 }
+
+func TestGetDocumentsByUserID(t *testing.T) {
+	database.Connect()
+
+	user := models.User{Email: "getdocs@test.com", Password: "123"}
+	database.DB.Create(&user)
+
+	doc1 := models.Document{
+		PublicId: "doc1-public",
+		Title:    "Doc 1",
+		UserID:   user.ID,
+	}
+	database.DB.Create(&doc1)
+
+	doc2 := models.Document{
+		PublicId: "doc2-public",
+		Title:    "Doc 2",
+		UserID:   user.ID,
+	}
+	database.DB.Create(&doc2)
+
+	user2 := models.User{Email: "getdocs2@test.com", Password: "123"}
+	database.DB.Create(&user2)
+	doc3 := models.Document{
+		PublicId: "doc3-public",
+		Title:    "Doc 3",
+		UserID:   user2.ID,
+	}
+	database.DB.Create(&doc3)
+
+	documents, err := services.GetDocumentsByUserID(user.ID)
+
+	assert.NoError(t, err)
+	assert.Len(t, documents, 2, "Deveria retornar 2 documentos para o usuário")
+	assert.Equal(t, "Doc 1", documents[0].Title)
+	assert.Equal(t, "Doc 2", documents[1].Title)
+}

@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,7 @@ func setupDocumentRouter() *gin.Engine {
 	})
 
 	r.POST("/documents", handlers.CreateDocument)
+	r.GET("/documents", handlers.GetDocuments)
 
 	return r
 }
@@ -86,4 +88,34 @@ func TestCreateDocumentWithoutFile(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestGetDocuments(t *testing.T) {
+	r := setupDocumentRouter()
+
+	var user models.User
+	database.DB.First(&user, 1)
+
+	doc1 := models.Document{PublicId: "doc1-pub", Title: "Doc 1", UserID: user.ID}
+	database.DB.Create(&doc1)
+
+	doc2 := models.Document{PublicId: "doc2-pub", Title: "Doc 2", UserID: user.ID}
+	database.DB.Create(&doc2)
+
+	req, _ := http.NewRequest("GET", "/documents", nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	assert.Len(t, response, 2)
+	assert.Equal(t, "doc1-pub", response[0]["public_id"])
+	assert.Equal(t, "Doc 1", response[0]["title"])
+	assert.Equal(t, "doc2-pub", response[1]["public_id"])
+	assert.Equal(t, "Doc 2", response[1]["title"])
 }

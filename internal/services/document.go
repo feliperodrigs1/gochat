@@ -77,3 +77,11 @@ func SplitTextIntoChunks(text string, chunkSize int) []string {
 
 	return chunks
 }
+
+func GetDocumentsByUserID(userID uint) ([]models.Document, error) {
+	var documents []models.Document
+	if err := database.DB.Where("user_id = ?", userID).Find(&documents).Error; err != nil {
+		return nil, err
+	}
+	return documents, nil
+}
