@@ -25,7 +25,7 @@ func setupAskRouter() *gin.Engine {
 
 	database.DB.Create(&models.Document{
 		Title:    "Test Doc",
-		PublicId: "test-doc-id",
+		PublicID: "test-doc-id",
 		UserID:   1,
 	})
 

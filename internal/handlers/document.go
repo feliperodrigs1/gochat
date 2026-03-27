@@ -62,7 +62,7 @@ func GetDocuments(c *gin.Context) {
 	var response []DocumentResponse
 	for _, doc := range documents {
 		response = append(response, DocumentResponse{
-			PublicID:  doc.PublicId,
+			PublicID:  doc.PublicID,
 			Title:     doc.Title,
 			CreatedAt: doc.CreatedAt.Format("2006-01-02 15:04:05"),
 		})

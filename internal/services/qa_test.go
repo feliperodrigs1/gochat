@@ -23,7 +23,7 @@ func TestAnswerWithConversation_Success(t *testing.T) {
 
 	doc := models.Document{
 		Title:    "Test Doc",
-		PublicId: "qa-test-id",
+		PublicID: "qa-test-id",
 		UserID:   99,
 	}
 	database.DB.Create(&doc)
@@ -88,7 +88,7 @@ func TestAnswerWithConversation_WithRewrite(t *testing.T) {
 
 	doc := models.Document{
 		Title:    "Test Doc",
-		PublicId: "qa-rewrite-test-id",
+		PublicID: "qa-rewrite-test-id",
 		UserID:   99,
 	}
 	database.DB.Create(&doc)

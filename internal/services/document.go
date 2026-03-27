@@ -22,7 +22,7 @@ func ProcessAndSaveDocument(userID uint, filename string, fileReader io.Reader) 
 	tx := database.DB.Begin()
 
 	doc := models.Document{
-		PublicId: uuid.NewString(),
+		PublicID: uuid.NewString(),
 		Title:    filename,
 		UserID:   userID,
 	}
@@ -57,7 +57,7 @@ func ProcessAndSaveDocument(userID uint, filename string, fileReader io.Reader) 
 		return "", 0, err
 	}
 
-	return doc.PublicId, len(chunks), nil
+	return doc.PublicID, len(chunks), nil
 }
 
 func SplitTextIntoChunks(text string, chunkSize int) []string {

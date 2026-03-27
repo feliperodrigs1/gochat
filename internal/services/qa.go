@@ -1,13 +1,16 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"gochat/internal/cache"
 	"gochat/internal/database"
 	"gochat/internal/models"
 )
@@ -17,8 +20,17 @@ type ScoredChunk struct {
 	Score   float64
 }
 
+var ctx = context.Background()
+
 func AnswerWithConversation(userID uint, documentID, question, externalID string) (string, error) {
 	normalizedQuestion := strings.ToLower(strings.TrimSpace(question))
+
+	cacheKey := "qa:" + documentID + ":" + normalizedQuestion
+	cached, err := cache.Client.Get(ctx, cacheKey).Result()
+
+	if err == nil && cached != "" {
+		return cached, nil
+	}
 
 	doc, err := fetchDocument(userID, documentID)
 	if err != nil {
@@ -43,22 +55,26 @@ func AnswerWithConversation(userID uint, documentID, question, externalID string
 
 	if err == nil && !isBadAnswer(answer) {
 		saveAssistantMessage(conv.ID, answer)
+
+		cache.Client.Set(ctx, cacheKey, answer, 10*time.Minute)
+
 		return answer, nil
 	}
 
 	rewritten, err := RewriteQuestion(history, normalizedQuestion)
 	if err != nil {
-		log.Println("erro no rewrite, usando original")
+		log.Println("error at rewrite, using original")
 		rewritten = normalizedQuestion
 	}
 
 	answer, err = generateAnswer(doc.ID, rewritten, history)
-
 	if err != nil {
 		return "", err
 	}
 
 	saveAssistantMessage(conv.ID, answer)
+
+	cache.Client.Set(ctx, cacheKey, answer, 10*time.Minute)
 
 	return answer, nil
 }
@@ -170,11 +186,16 @@ func getTopScoredChunks(chunks []models.Chunk, question string, questionEmbeddin
 		contentLower := strings.ToLower(ch.Content)
 
 		for _, word := range words {
-			if strings.Contains(contentLower, word) {
-				if len(word) > 4 {
-					score += 0.05
-				}
+			if len(word) < 4 {
+				continue
 			}
+			if strings.Contains(contentLower, word) {
+				score += 0.15
+			}
+		}
+
+		if strings.Contains(contentLower, question) {
+			score += 0.2
 		}
 
 		scored = append(scored, ScoredChunk{
@@ -187,7 +208,7 @@ func getTopScoredChunks(chunks []models.Chunk, question string, questionEmbeddin
 		return scored[i].Score > scored[j].Score
 	})
 
-	if len(scored) == 0 || scored[0].Score < 0.6 {
+	if len(scored) == 0 {
 		return []ScoredChunk{}
 	}
 
@@ -211,7 +232,8 @@ func isBadAnswer(answer string) bool {
 
 	return strings.Contains(a, "i don't know") ||
 		strings.Contains(a, "não sei") ||
-		strings.Contains(a, "não encontrado")
+		strings.Contains(a, "não encontrado") ||
+		len(a) < 10
 }
 
 func saveAssistantMessage(conversationID uint, answer string) {

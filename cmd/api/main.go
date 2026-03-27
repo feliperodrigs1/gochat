@@ -9,11 +9,13 @@ import (
 	"gochat/internal/database"
 	"gochat/internal/handlers"
 	"gochat/internal/middleware"
+	"gochat/internal/cache"
 )
 
 func main() {
 	config.LoadEnv()
 	database.Connect()
+	cache.Connect()
 
 	r := gin.Default()
 

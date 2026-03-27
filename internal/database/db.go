@@ -3,8 +3,9 @@ package database
 import (
 	"log"
 	"os"
-	"path/filepath"
+	"fmt"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
@@ -15,25 +16,30 @@ var DB *gorm.DB
 
 func Connect() {
 	env := os.Getenv("ENV")
-	var dbName string
+	
+	var db *gorm.DB
+	var err error
 
 	if env == "test" {
-		dbName = ":memory:"
+		db, err = gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	} else {
-		dbName = "data/gochat.db"
+		dsn := fmt.Sprintf(
+			"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+			getEnv("DB_HOST", "db"),
+			getEnv("DB_USER", "postgres"),
+			getEnv("DB_PASSWORD", "postgres"),
+			getEnv("DB_NAME", "gochat"),
+			getEnv("DB_PORT", "5432"),
+		)
 
-		dir := filepath.Dir(dbName)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			log.Fatal("failed to create database directory:", err)
-		}
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbName), &gorm.Config{})
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	db.AutoMigrate(
+	err = db.AutoMigrate(
 		&models.User{},
 		&models.Document{},
 		&models.Chunk{},
@@ -42,5 +48,16 @@ func Connect() {
 		&models.Message{},
 	)
 
+	if err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+
 	DB = db
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }

@@ -64,14 +64,14 @@ func TestGetDocumentsByUserID(t *testing.T) {
 	database.DB.Create(&user)
 
 	doc1 := models.Document{
-		PublicId: "doc1-public",
+		PublicID: "doc1-public",
 		Title:    "Doc 1",
 		UserID:   user.ID,
 	}
 	database.DB.Create(&doc1)
 
 	doc2 := models.Document{
-		PublicId: "doc2-public",
+		PublicID: "doc2-public",
 		Title:    "Doc 2",
 		UserID:   user.ID,
 	}
@@ -80,7 +80,7 @@ func TestGetDocumentsByUserID(t *testing.T) {
 	user2 := models.User{Email: "getdocs2@test.com", Password: "123"}
 	database.DB.Create(&user2)
 	doc3 := models.Document{
-		PublicId: "doc3-public",
+		PublicID: "doc3-public",
 		Title:    "Doc 3",
 		UserID:   user2.ID,
 	}

@@ -96,10 +96,10 @@ func TestGetDocuments(t *testing.T) {
 	var user models.User
 	database.DB.First(&user, 1)
 
-	doc1 := models.Document{PublicId: "doc1-pub", Title: "Doc 1", UserID: user.ID}
+	doc1 := models.Document{PublicID: "doc1-pub", Title: "Doc 1", UserID: user.ID}
 	database.DB.Create(&doc1)
 
-	doc2 := models.Document{PublicId: "doc2-pub", Title: "Doc 2", UserID: user.ID}
+	doc2 := models.Document{PublicID: "doc2-pub", Title: "Doc 2", UserID: user.ID}
 	database.DB.Create(&doc2)
 
 	req, _ := http.NewRequest("GET", "/documents", nil)

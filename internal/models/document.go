@@ -4,7 +4,7 @@ import "gorm.io/gorm"
 
 type Document struct {
 	gorm.Model
-	PublicId string  `json:"public_id" gorm:"uniqueIndex;not null"`
+	PublicID string  `gorm:"type:uuid;default:gen_random_uuid()"`
 	UserID   uint    `json:"-" gorm:"not null"`
 	Title    string  `json:"title" gorm:"not null"`
 	Chunks   []Chunk
